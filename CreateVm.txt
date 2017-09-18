@@ -1,0 +1,70 @@
+#Create a VM
+
+#Create Resource Group -----------------------------------------------------------
+#simulator resource group
+$ResourceGroup = "SimulatorVmResourceGroup"
+$Location = "westus2"
+
+New-AzureRmResourceGroup -Name $ResourceGroup -Location $Location
+
+#Create Subnet for the VM --------------------------------------------------------
+#Subnet Variables
+$SubnetName = "SimulatorVm_Subnet"
+$VirtualNetwork = "SimulatorVm_VirtualNetwork"
+
+# Create a subnet configuration
+$subnetConfig = New-AzureRmVirtualNetworkSubnetConfig -Name $SubnetName -AddressPrefix 192.168.1.0/24
+
+# Create a virtual network
+$vnet = New-AzureRmVirtualNetwork -ResourceGroupName $ResourceGroup -Location $Location -Name $VirtualNetwork -AddressPrefix 192.168.0.0/16 -Subnet $subnetConfig
+
+# Create a public IP address and specify a DNS name
+$pip = New-AzureRmPublicIpAddress -ResourceGroupName $ResourceGroup -Location $Location -AllocationMethod Static -IdleTimeoutInMinutes 4 -Name "mypublicdns$(Get-Random)"
+
+#Security Group Rule Variables
+$SecurityGroupRulePrefix = "SimualtorVmRule_"
+$SecurityGroupRDP = $($SecurityGroupRulePrefix + "RDP")
+$SecurityGroupSimulatorsInbound = $($SecurityGroupRulePrefix + "SimulatorInbound")
+$SecurityGroupSimulatorsOutbound = $($SecurityGroupRulePrefix + "SimulatorOutbound")
+$NetworkSecurityGroupName = "SimulatorVm_NSG"
+$NetworkInterfaceCard = "SimulatorVm_NIC"
+
+# Create an inbound network security group rule for port 3389
+$nsgRuleRDP = New-AzureRmNetworkSecurityRuleConfig -Name $SecurityGroupRDP  -Protocol Tcp `
+    -Direction Inbound -Priority 1000 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * `
+    -DestinationPortRange 3389 -Access Allow
+
+# Create an inbound network security group rule for port 1234
+$nsgRuleWeb = New-AzureRmNetworkSecurityRuleConfig -Name SecurityGroupSimulatorsInbound -Protocol Tcp `
+    -Direction Inbound -Priority 1001 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * `
+    -DestinationPortRange 1234 -Access Allow
+
+# Create a network security group
+$nsg = New-AzureRmNetworkSecurityGroup -ResourceGroupName $ResourceGroup -Location $Location `
+    -Name $NetworkSecurityGroupName -SecurityRules $nsgRuleRDP,$nsgRuleWeb
+
+# Create a virtual network card and associate with public IP address and NSG
+$nic = New-AzureRmNetworkInterface -Name $NetworkInterfaceCard -ResourceGroupName $ResourceGroup -Location $Location `
+    -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $pip.Id -NetworkSecurityGroupId $nsg.Id
+
+# Create the VM --------------------------------------------------------------------------
+
+$VirtualMachineName = "SimulatorVm1"
+$VmSize = "Standard_D2_v2"
+
+# Define a credential object
+$cred = Get-Credential
+
+# Create a virtual machine configuration
+$vmConfig = New-AzureRmVMConfig -VMName $VirtualMachineName -VMSize $VmSize | `
+    Set-AzureRmVMOperatingSystem -Windows -ComputerName $VirtualMachineName -Credential $cred | `
+    Set-AzureRmVMSourceImage -PublisherName MicrosoftWindowsServer -Offer WindowsServer `
+    -Skus 2016-Datacenter -Version latest | Add-AzureRmVMNetworkInterface -Id $nic.Id
+
+New-AzureRmVM -ResourceGroupName $ResourceGroup -Location $Location -VM $vmConfig
+
+# Connect to the VM
+
+Get-AzureRmPublicIpAddress -ResourceGroupName $ResourceGroupName | Select IpAddress
+
+

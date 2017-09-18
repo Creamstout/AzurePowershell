@@ -1,0 +1,9 @@
+# Create the resource group for API Management
+New-AzureRmResourceGroup -Name JohnBergantApiManagement -Location "westus2"
+
+# Create Api Management
+$ResourceGroupName = "JohnBergantApiManagement"
+
+$ServiceName = "JohnBergantApiManagementService"
+
+New-AzureRmApiManagementContext -ResourceGroupName $ResourceGroupName -ServiceName $ServiceName 
